@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Andrew Photography</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;500;700&display=swap">
+<style>
+:root {
+  --ground: #a5b2bd;
+  --ground-deep: #93a1ad;
+  --ink: #16202a;
+  --ink-soft: #33424f;
+  --mat: #ffffff;
+  --nav: #ffffff;
+  --line: #c6ced5;
+  --panel: #1f2c37;
+  --panel-ink: #eef2f5;
+  --panel-dim: #9fb0be;
+  --accent: #2f5f80;
+  --sans: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html { background: var(--ground); }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  padding-inline: 0;
+}
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* navigation */
+.nav {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 10;
+  background: var(--nav);
+  border-bottom: 1px solid var(--line);
+  padding: 14px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 32px;
+}
+.mark {
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.95rem;
+  text-decoration: none;
+  color: var(--ink);
+}
+.mark span { font-weight: 400; color: var(--ink-soft); }
+.links { display: flex; flex-wrap: wrap; gap: 4px 28px; }
+.links a {
+  text-decoration: none;
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  padding: 4px 0;
+  border-bottom: 2px solid transparent;
+}
+.links a:hover { color: var(--ink); }
+.links a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); }
+
+main { padding: 48px 16px 96px; }
+.column { max-width: 780px; margin-inline: auto; }
+
+/* feed */
+.filters {
+  display: flex; flex-wrap: wrap; gap: 6px 22px;
+  margin: 0 0 32px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.filters a { text-decoration: none; color: var(--ink-soft); border-bottom: 1px solid transparent; }
+.filters a:hover, .filters a[aria-current="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+
+.feed { display: flex; flex-direction: column; gap: 72px; }
+/* Each photo sizes itself from its own width/height ratio (--r). Wide shots fill the column;
+   tall shots narrow so they never grow taller than 82% of the screen. */
+.photo { --pad: 0px; --r: 1.5; margin: 0 auto; width: min(100%, calc(82vh * var(--r) + 2 * var(--pad))); }
+.mat { padding: var(--pad); }
+.frame {
+  position: relative;
+  overflow: hidden;
+  background: var(--ground-deep);
+  width: 100%;
+  aspect-ratio: var(--r);
+  cursor: default;
+}
+.frame img, .frame .ph { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ph { position: absolute; inset: 0; display: flex; align-items: flex-end; padding: 14px; font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.06em; color: rgba(255,255,255,0); }
+.ph::after { content: attr(data-note); color: #eef2f5; opacity: 1; }
+
+/* camera settings panel: solid, square, slides in from the left inside the white border */
+.exif {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: min(420px, 88%);
+  background: linear-gradient(to right, rgba(31, 44, 55, 0.94) 0%, rgba(31, 44, 55, 0.88) 60%, rgba(31, 44, 55, 0) 100%);
+  color: var(--panel-ink);
+  padding: 22px clamp(40px, 26%, 110px) 20px 22px;
+  transform: translateX(-100%);
+  transition: transform 260ms cubic-bezier(.2,.7,.2,1);
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 14px;
+}
+.frame:hover .exif, .frame:focus-within .exif, .frame.open .exif { transform: translateX(0); }
+.exif h3 { margin: 0; font-size: 1rem; font-weight: 500; line-height: 1.3; text-wrap: balance; }
+.exif dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-family: var(--mono); font-size: 0.78rem; }
+.exif .none { margin: 0; font-family: var(--mono); font-size: 0.78rem; color: var(--panel-dim); }
+.exif dt { color: var(--panel-dim); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.68rem; padding-top: 1px; }
+.exif dd { margin: 0; font-variant-numeric: tabular-nums; }
+.hint { position: absolute; right: 0; bottom: 0; background: var(--mat); color: var(--ink-soft); font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 5px 9px; }
+@media (hover: hover) { .hint { display: none; } }
+
+.cap { display: flex; justify-content: space-between; gap: 16px; padding-top: 12px; font-size: 0.86rem; color: var(--ink); }
+.cap span:last-child { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); white-space: nowrap; }
+
+/* text views */
+.page h1 { font-size: clamp(1.9rem, 5vw, 2.8rem); line-height: 1.1; font-weight: 700; margin: 0 0 28px; letter-spacing: -0.01em; text-wrap: balance; }
+.page p { max-width: 62ch; margin: 0 0 1.1em; }
+.sheet { background: var(--mat); padding: clamp(20px, 5vw, 44px); }
+.rows { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--ink); }
+.rows li { border-bottom: 1px solid var(--ink); }
+.rows a { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 18px 0; text-decoration: none; }
+.rows a:hover .name { text-decoration: underline; text-underline-offset: 5px; }
+.rows .name { font-size: clamp(1.2rem, 3.4vw, 1.7rem); font-weight: 500; }
+.rows .n { font-family: var(--mono); font-size: 0.78rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.06em; }
+.meta { display: grid; grid-template-columns: auto 1fr; gap: 10px 28px; margin: 28px 0 0; font-family: var(--mono); font-size: 0.86rem; }
+.meta dt { color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.72rem; padding-top: 2px; }
+.meta dd { margin: 0; overflow-wrap: anywhere; }
+.foot { max-width: 780px; margin: 64px auto 0; font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); }
+
+.filters.sub { margin-top: -14px; font-size: 0.72rem; align-items: baseline; }
+.filters .grp { color: var(--ink); font-weight: 500; padding-right: 2px; }
+.filters .grp:not(:first-child) { margin-left: 14px; }
+.empty { font-family: var(--mono); font-size: 0.85rem; color: var(--ink-soft); }
+.medium { margin: 0 0 56px; }
+.medium h2 { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin: 0 0 8px; padding-bottom: 10px; border-bottom: 3px solid var(--ink); font-size: clamp(1.5rem, 4vw, 2.2rem); font-weight: 700; }
+.medium h2 a { text-decoration: none; }
+.medium h2 a:hover { text-decoration: underline; text-underline-offset: 6px; }
+.medium h2 .n { font-family: var(--mono); font-size: 0.78rem; font-weight: 400; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.06em; }
+.gh { margin: 28px 0 10px; font-family: var(--mono); font-size: 0.78rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); }
+
+.stocks { display: flex; flex-wrap: wrap; gap: 6px 22px; padding: 0 0 16px; margin-top: -8px; font-family: var(--mono); font-size: 0.76rem; letter-spacing: 0.05em; text-transform: uppercase; }
+.stocks a { text-decoration: none; color: var(--ink-soft); border-bottom: 1px solid transparent; }
+.stocks a:hover { color: var(--ink); border-bottom-color: var(--ink); }
+.stocks a span { margin-left: 8px; color: var(--ink); }
+
+.fullbtn { align-self: flex-start; font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--panel-ink); background: none; border: 1px solid var(--panel-dim); border-radius: 0; padding: 7px 11px; cursor: pointer; }
+.fullbtn:hover { background: var(--accent); border-color: var(--accent); }
+#lb { position: fixed; inset: 0; z-index: 50; background: #0f1820; color: #eef2f5; overflow: auto; }
+.lbbar { position: sticky; top: 0; left: 0; z-index: 1; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 16px; background: #0f1820; font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.lbbar #lbstat { color: var(--panel-dim); margin-left: auto; text-align: right; }
+.lbbar button { font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; background: none; border: 1px solid #eef2f5; border-radius: 0; padding: 6px 12px; cursor: pointer; }
+.lbbar button:hover { background: var(--accent); border-color: var(--accent); }
+.lbstage { min-height: calc(100% - 46px); display: flex; }
+.lbstage img { display: block; margin: auto; max-width: 100%; max-height: calc(100vh - 46px); cursor: zoom-in; }
+#lb.zoom .lbstage img { max-width: none; max-height: none; cursor: zoom-out; }
+body.lbopen { overflow: hidden; }
+
+.hl { font-style: normal; font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid var(--ink); padding: 1px 7px; margin-left: 12px; vertical-align: 1px; }
+
+.stockgrp { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.kids { display: flex; flex-wrap: wrap; gap: 4px 16px; padding-left: 14px; border-left: 1px solid var(--ink-soft); }
+
+@media (prefers-reduced-motion: reduce) { .exif { transition: none; } }
+</style>
+
+<nav class="nav" aria-label="Main">
+  <a class="mark" href="#work">Andrew <span>Photography</span></a>
+  <div class="links">
+    <a href="#work" data-view="work">Work</a>
+    <a href="#collections" data-view="collections">Collections</a>
+    <a href="#about" data-view="about">About</a>
+    <a href="#contact" data-view="contact">Contact</a>
+  </div>
+</nav>
+<main><div class="column" id="view"></div></main>
+
+<script src="data.js"></script>
+<script>
+/* Albums and photos come from data.js, which build.py generates from the images folder. */
+/* Film stock sub-albums: each photo's stock comes from its "Film" settings row, or set
+   stock: "Portra 400" on the photo to override. Photos with the same stock (inside the same
+   album) group into a sub-album automatically. Use one spelling per stock. */
+PHOTOS.forEach(function (p) {
+  if (!p.sub) {
+    var row = p.settings.filter(function (r) { return r[0] === "Film"; })[0];
+    p.sub = p.stock ? [p.stock] : (row ? [row[1]] : []);
+  }
+});
+var IG = "https://www.instagram.com/and_rewphotography/";
+
+var view = document.getElementById("view");
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+function slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+function plural(n) { return n + (n === 1 ? ' photograph' : ' photographs'); }
+function count(medium, album) {
+  return PHOTOS.filter(function (p) { return p.medium === medium && (!album || p.album === album); }).length;
+}
+function findMedium(s) { return TREE.filter(function (t) { return slug(t.medium) === s; })[0]; }
+
+function photoHtml(p) {
+  var inner = p.src
+    ? '<img src="' + esc(p.src) + '" alt="' + esc(p.title) + '" loading="lazy">'
+    : '<div class="ph" data-note="Placeholder: set src in PHOTOS" style="background:linear-gradient(160deg,' + p.tone[0] + ',' + p.tone[1] + ')"></div>';
+  var rows = p.settings.map(function (r) { return '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join("");
+  return '<figure class="photo" style="--r:' + (p.ratio || 1.5) + '"><div class="mat">' +
+    '<div class="frame" tabindex="0" aria-label="' + esc(p.title) + ', camera settings on hover or focus" title="Double-click for full size" data-full="' + esc(p.full || p.src || '') + '" data-web="' + esc(p.src || '') + '">' + inner +
+    '<div class="exif"><h3>' + esc(p.title) + '</h3>' + (rows ? '<dl>' + rows + '</dl>' : '<p class="none">No settings added</p>') + (p.src ? '<button type="button" class="fullbtn">View full size</button>' : '') + '</div>' +
+    '<span class="hint">Tap for settings</span></div></div>' +
+    '<figcaption class="cap"><span>' + esc(p.title) + (p.featured ? '<em class="hl">Highlight</em>' : '') + '</span><span>' + esc(p.medium) + ' / ' + esc(p.album) + (p.sub.length ? ' / ' + esc(p.sub.join(' / ')) : '') + '</span></figcaption></figure>';
+}
+
+/* sub-albums inside an album: level 1 (a stock, or a series like a trip) and level 2 (stocks inside a series) */
+function subsFor(medium, aSlug, parent) {
+  var out = [];
+  PHOTOS.forEach(function (p) {
+    if (p.medium !== medium || slug(p.album) !== aSlug) return;
+    var name;
+    if (!parent) name = p.sub[0];
+    else { if (!p.sub[0] || slug(p.sub[0]) !== parent) return; name = p.sub[1]; }
+    if (name && out.indexOf(name) < 0) out.push(name);
+  });
+  return out;
+}
+function subCount(medium, aSlug, parent, name) {
+  return PHOTOS.filter(function (p) {
+    if (p.medium !== medium || slug(p.album) !== aSlug) return false;
+    if (!parent) return p.sub[0] === name;
+    return p.sub[0] && slug(p.sub[0]) === parent && p.sub[1] === name;
+  }).length;
+}
+
+function renderWork(mSlug, aSlug, sSlug, tSlug) {
+  var pinned = mSlug === "pinned";
+  var m = pinned ? null : findMedium(mSlug);
+  var list = PHOTOS.filter(function (p) {
+    if (pinned) return !!p.pinned;
+    if (!m) return true;
+    if (p.medium !== m.medium) return false;
+    if (aSlug && slug(p.album) !== aSlug) return false;
+    if (sSlug && slug(p.sub[0] || "") !== sSlug) return false;
+    return !tSlug || slug(p.sub[1] || "") === tSlug;
+  });
+  if (pinned) list.sort(function (a, b) { return (b.featured ? 1 : 0) - (a.featured ? 1 : 0); });
+  var hasPinned = PHOTOS.some(function (p) { return p.pinned; });
+  var top = '<div class="filters">' + (hasPinned ? '<a href="#work/pinned"' + (pinned ? ' aria-current="true"' : '') + '>Pinned</a>' : '') +
+    '<a href="#work"' + (!m && !pinned ? ' aria-current="true"' : '') + '>All</a>' +
+    TREE.map(function (t) {
+      return '<a href="#work/' + slug(t.medium) + '"' + (m && m.medium === t.medium && !aSlug ? ' aria-current="true"' : '') + '>' + t.medium + '</a>';
+    }).join("") + '</div>';
+  var sub = "";
+  if (m) {
+    sub = '<div class="filters sub">' + m.groups.map(function (g) {
+      return '<span class="grp">' + esc(g.title) + '</span>' + g.albums.map(function (a) {
+        return '<a href="#work/' + slug(m.medium) + '/' + slug(a) + '"' + (aSlug === slug(a) ? ' aria-current="true"' : '') + '>' + esc(a) + '</a>';
+      }).join("");
+    }).join("") + '</div>';
+  }
+  var sr = "";
+  if (m && aSlug) {
+    var base = '#work/' + slug(m.medium) + '/' + aSlug;
+    var l1 = subsFor(m.medium, aSlug, "");
+    if (l1.length) {
+      var nested = PHOTOS.some(function (p) { return p.medium === m.medium && slug(p.album) === aSlug && p.sub[1]; });
+      sr = '<div class="filters sub"><span class="grp">' + (nested ? 'Series' : 'Stock') + '</span><a href="' + base + '"' + (!sSlug ? ' aria-current="true"' : '') + '>All</a>' +
+        l1.map(function (s) { return '<a href="' + base + '/' + slug(s) + '"' + (sSlug === slug(s) ? ' aria-current="true"' : '') + '>' + esc(s) + '</a>'; }).join("") + '</div>';
+      if (sSlug) {
+        var l2 = subsFor(m.medium, aSlug, sSlug);
+        if (l2.length) {
+          sr += '<div class="filters sub"><span class="grp">Stock</span><a href="' + base + '/' + sSlug + '"' + (!tSlug ? ' aria-current="true"' : '') + '>All</a>' +
+            l2.map(function (s) { return '<a href="' + base + '/' + sSlug + '/' + slug(s) + '"' + (tSlug === slug(s) ? ' aria-current="true"' : '') + '>' + esc(s) + '</a>'; }).join("") + '</div>';
+        }
+      }
+    }
+  }
+  var body = list.length
+    ? '<div class="feed">' + list.map(photoHtml).join("") + '</div>'
+    : '<p class="empty">' + (PHOTOS.length ? 'No photographs in this album yet.' : 'No photographs yet. Add images to the images folder, then run build.py.') + '</p>';
+  view.innerHTML = top + sub + sr + body;
+}
+
+function renderCollections() {
+  view.innerHTML = '<div class="page"><h1>Collections</h1>' + TREE.map(function (t) {
+    return '<section class="medium"><h2><a href="#work/' + slug(t.medium) + '">' + esc(t.medium) + '</a><span class="n">' + plural(count(t.medium)) + '</span></h2>' +
+      t.groups.map(function (g) {
+        return '<h3 class="gh">' + esc(g.title) + '</h3><ul class="rows">' + g.albums.map(function (a) {
+          return '<li><a href="#work/' + slug(t.medium) + '/' + slug(a) + '"><span class="name">' + esc(a) + '</span><span class="n">' + plural(count(t.medium, a)) + '</span></a>' +
+            (function () {
+              var st = subsFor(t.medium, slug(a), "");
+              if (!st.length) return '';
+              var b = '#work/' + slug(t.medium) + '/' + slug(a) + '/';
+              return '<div class="stocks">' + st.map(function (s) {
+                var kids = subsFor(t.medium, slug(a), slug(s));
+                return '<span class="stockgrp"><a href="' + b + slug(s) + '">' + esc(s) + '<span>' + subCount(t.medium, slug(a), "", s) + '</span></a>' +
+                  (kids.length ? '<span class="kids">' + kids.map(function (k) { return '<a href="' + b + slug(s) + '/' + slug(k) + '">' + esc(k) + '<span>' + subCount(t.medium, slug(a), slug(s), k) + '</span></a>'; }).join("") + '</span>' : '') + '</span>';
+              }).join("") + '</div>';
+            })() + '</li>';
+        }).join("") + '</ul>';
+      }).join("") + '</section>';
+  }).join("") + '</div>';
+}
+
+function renderAbout() {
+  var me = photoHtml({title: "Andrew", src: "about.jpg", full: "about.jpg", ratio: 1, sub: [], medium: "About", album: "Self-portrait",
+    settings: [["Camera", "Mamiya C330"], ["Film", "Fujicolor Pro 400H"]]});
+  view.innerHTML = '<div class="page"><div class="sheet" style="margin-bottom:24px"><h1 style="margin:0">About</h1></div>' + me +
+    '<div class="sheet" style="margin-top:24px">' +
+    '<dl class="meta"><dt>Based in</dt><dd>Philadelphia</dd>' +
+    '<dt>Currently</dt><dd>At RPI in Troy, NY</dd>' +
+    '<dt>Shoots</dt><dd>Film travel work, personal enjoyment, digital, and sports/event photography for A&amp;S Media</dd>' +
+    '<dt>Current kit</dt><dd>Fujifilm GF670, Fuji G617, Ricoh GR III, Panasonic Lumix G1</dd></dl></div></div>';
+}
+
+function renderContact() {
+  view.innerHTML = '<div class="page"><div class="sheet"><h1>Contact</h1>' +
+    '<p>For prints, licensing or shoots, get in touch.</p>' +
+    '<dl class="meta"><dt>Email</dt><dd><a href="mailto:computers.andrew@gmail.com">computers.andrew@gmail.com</a></dd>' +
+    '<dt>Phone</dt><dd><a href="tel:+12673557971">+1 (267) 355 7971</a></dd>' +
+    '<dt>Instagram</dt><dd><a href="' + IG + '" target="_blank" rel="noopener">@and_rewphotography</a></dd></dl></div></div>';
+}
+
+function route() {
+  var h = (location.hash || (PHOTOS.some(function (p) { return p.pinned; }) ? "#work/pinned" : "#work")).slice(1).split("/");
+  var v = h[0] || "work";
+  if (v === "collections") renderCollections();
+  else if (v === "about") renderAbout();
+  else if (v === "contact") renderContact();
+  else { v = "work"; renderWork(h[1] || "", h[2] || "", h[3] || "", h[4] || ""); }
+  document.querySelectorAll(".links a").forEach(function (a) {
+    if (a.dataset.view === v) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  });
+  window.scrollTo(0, 0);
+}
+
+/* double-click a photo (or press "View full size") to open the original */
+var lb = document.createElement("div");
+lb.id = "lb";
+lb.hidden = true;
+lb.innerHTML = '<div class="lbbar"><span id="lbtitle"></span><span id="lbstat"></span><button type="button" id="lbclose">Close</button></div>' +
+  '<div class="lbstage"><img id="lbimg" alt=""></div>';
+document.body.appendChild(lb);
+var lbimg = document.getElementById("lbimg"), lbstat = document.getElementById("lbstat"), lbtoken = 0;
+function openFull(fr) {
+  if (!fr || !fr.dataset.full) return;
+  var full = fr.dataset.full, web = fr.dataset.web, token = ++lbtoken;
+  var h3 = fr.querySelector(".exif h3");
+  document.getElementById("lbtitle").textContent = h3 ? h3.textContent : "";
+  lb.classList.remove("zoom");
+  lb.hidden = false;
+  document.body.classList.add("lbopen");
+  lb.scrollTop = 0; lb.scrollLeft = 0;
+  lbimg.src = web;
+  if (full === web) { lbstat.textContent = "Click to zoom"; return; }
+  lbstat.textContent = "Loading full image...";
+  var big = new Image();
+  big.onload = function () {
+    if (token !== lbtoken) return;
+    lbimg.src = full;
+    lbstat.textContent = "Full size, " + big.naturalWidth + " x " + big.naturalHeight + " px. Click to zoom";
+  };
+  big.onerror = function () { if (token === lbtoken) lbstat.textContent = "Could not load the full image"; };
+  big.src = full;
+}
+function closeFull() {
+  lbtoken++;
+  lb.hidden = true;
+  lbimg.removeAttribute("src");
+  document.body.classList.remove("lbopen");
+}
+lbimg.addEventListener("click", function () {
+  lb.classList.toggle("zoom");
+  lb.scrollLeft = (lb.scrollWidth - lb.clientWidth) / 2;
+  lb.scrollTop = (lb.scrollHeight - lb.clientHeight) / 2;
+});
+document.getElementById("lbclose").addEventListener("click", closeFull);
+document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !lb.hidden) closeFull(); });
+view.addEventListener("dblclick", function (e) {
+  var fr = e.target.closest(".frame");
+  if (fr) openFull(fr);
+});
+
+/* real images set their own shape once loaded, so "ratio" in PHOTOS is optional */
+view.addEventListener("load", function (e) {
+  var im = e.target;
+  if (im.tagName !== "IMG" || !im.naturalHeight) return;
+  var fig = im.closest(".photo");
+  if (fig) fig.style.setProperty("--r", im.naturalWidth / im.naturalHeight);
+}, true);
+
+/* touch: tap toggles the settings panel */
+view.addEventListener("click", function (e) {
+  var fb = e.target.closest(".fullbtn");
+  if (fb) { openFull(fb.closest(".frame")); return; }
+  if (window.matchMedia("(hover: hover)").matches) return;
+  var fr = e.target.closest(".frame");
+  if (fr) fr.classList.toggle("open");
+});
+
+if (PHOTOS.some(function (p) { return p.pinned; })) {
+  document.querySelectorAll('.mark, .links a[data-view="work"]').forEach(function (a) { a.setAttribute("href", "#work/pinned"); });
+}
+window.addEventListener("hashchange", route);
+route();
+</script>
+</html>
