@@ -4678,3 +4678,12 @@ var PHOTOS = [
   ]
  }
 ];
+var LINKS = [
+ {
+  "medium": "Digital",
+  "album": "2026",
+  "title": "HackRPI: In The Clouds",
+  "url": "https://photos.app.goo.gl/Ti1wJ5dBL6FaYdC38",
+  "note": "Google Photos album"
+ }
+];

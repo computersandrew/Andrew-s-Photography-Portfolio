@@ -144,6 +144,10 @@ main { padding: 48px 16px 96px; }
 .filters.sub { margin-top: -14px; font-size: 0.72rem; align-items: baseline; }
 .filters .grp { color: var(--ink); font-weight: 500; padding-right: 2px; }
 .filters .grp:not(:first-child) { margin-left: 14px; }
+.extlink { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin: 0 0 32px; padding: 20px 22px; background: var(--nav); color: var(--ink); text-decoration: none; border-left: 4px solid var(--accent); }
+.extlink:hover .t, .extlink:focus-visible .t { text-decoration: underline; text-underline-offset: 5px; }
+.extlink .t { font-size: clamp(1.1rem, 3vw, 1.4rem); font-weight: 500; }
+.extlink .n { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); white-space: nowrap; }
 .empty { font-family: var(--mono); font-size: 0.85rem; color: var(--ink-soft); }
 .medium { margin: 0 0 56px; }
 .medium h2 { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin: 0 0 8px; padding-bottom: 10px; border-bottom: 3px solid var(--ink); font-size: clamp(1.5rem, 4vw, 2.2rem); font-weight: 700; }
@@ -243,6 +247,13 @@ function subCount(medium, aSlug, parent, name) {
   }).length;
 }
 
+function linksFor(medium, aSlug) {
+  return (typeof LINKS === "undefined" ? [] : LINKS).filter(function (l) { return slug(l.medium) === slug(medium) && slug(l.album) === aSlug; });
+}
+function linkHtml(l) {
+  return '<a class="extlink" href="' + esc(l.url) + '" target="_blank" rel="noopener noreferrer"><span class="t">' + esc(l.title) + '</span><span class="n">' + esc(l.note || "External album") + ' &#8599;</span></a>';
+}
+
 function renderWork(mSlug, aSlug, sSlug, tSlug) {
   var pinned = mSlug === "pinned";
   var m = pinned ? null : findMedium(mSlug);
@@ -286,10 +297,11 @@ function renderWork(mSlug, aSlug, sSlug, tSlug) {
       }
     }
   }
+  var ext = (m && aSlug && !sSlug) ? linksFor(m.medium, aSlug).map(linkHtml).join("") : "";
   var body = list.length
     ? '<div class="feed">' + list.map(photoHtml).join("") + '</div>'
-    : '<p class="empty">' + (PHOTOS.length ? 'No photographs in this album yet.' : 'No photographs yet. Add images to the images folder, then run build.py.') + '</p>';
-  view.innerHTML = top + sub + sr + body;
+    : ext ? '' : '<p class="empty">' + (PHOTOS.length ? 'No photographs in this album yet.' : 'No photographs yet. Add images to the images folder, then run build.py.') + '</p>';
+  view.innerHTML = top + sub + sr + ext + body;
 }
 
 function renderCollections() {
@@ -298,6 +310,9 @@ function renderCollections() {
       t.groups.map(function (g) {
         return '<h3 class="gh">' + esc(g.title) + '</h3><ul class="rows">' + g.albums.map(function (a) {
           return '<li><a href="#work/' + slug(t.medium) + '/' + slug(a) + '"><span class="name">' + esc(a) + '</span><span class="n">' + plural(count(t.medium, a)) + '</span></a>' +
+            linksFor(t.medium, slug(a)).map(function (l) {
+              return '<div class="stocks"><span class="stockgrp"><a href="' + esc(l.url) + '" target="_blank" rel="noopener noreferrer">' + esc(l.title) + ' &#8599;</a></span></div>';
+            }).join("") +
             (function () {
               var st = subsFor(t.medium, slug(a), "");
               if (!st.length) return '';

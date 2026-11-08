@@ -28,6 +28,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 IMG = os.path.join(ROOT, "images")
 CSV_PATH = os.path.join(ROOT, "settings.csv")
 OUT = os.path.join(ROOT, "data.js")
+LINKS_PATH = os.path.join(ROOT, "links.csv")  # external albums: medium, album, title, url, note
 EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
 FIELDS = ["file", "title", "film", "camera", "lens", "focal", "aperture", "shutter", "iso", "pinned", "featured"]
 MEDIUM_ORDER = ["film", "digital"]
@@ -203,6 +204,16 @@ def make_web(path, key):
     return None
 
 
+def load_links():
+    """External links shown inside an album (e.g. a Google Photos album). Edit links.csv."""
+    if not os.path.exists(LINKS_PATH):
+        return []
+    with open(LINKS_PATH, newline="", encoding="utf-8-sig") as fh:
+        rows = [{k: (v or "").strip() for k, v in r.items() if k} for r in csv.DictReader(fh)]
+    return [{"medium": r.get("medium", ""), "album": r.get("album", ""), "title": r.get("title", ""),
+             "url": r.get("url", ""), "note": r.get("note", "")} for r in rows if r.get("url") and r.get("title")]
+
+
 def main():
     tree, found = scan()
     rows = load_rows()
@@ -278,6 +289,7 @@ def main():
         fh.write("/* lite build: double-click opens the web copy, not the original */\n" if LITE else "")
         fh.write("var TREE = " + json.dumps(tree, indent=1, ensure_ascii=False) + ";\n")
         fh.write("var PHOTOS = " + json.dumps(photos, indent=1, ensure_ascii=False) + ";\n")
+        fh.write("var LINKS = " + json.dumps(load_links(), indent=1, ensure_ascii=False) + ";\n")
 
     stale = [r["file"] for r in rows if r.get("file") and r["file"] not in used]
     albums = sum(len(g["albums"]) for m in tree for g in m["groups"])
