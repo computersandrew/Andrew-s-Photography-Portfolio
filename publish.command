@@ -19,6 +19,7 @@ echo; echo "Uploading to $SERVER ..."
 rsync -av --progress --delete \
   --exclude ".DS_Store" --exclude "__pycache__" \
   --exclude "*.command" --exclude "build.py" --exclude "settings.csv" \
+  --exclude "/.git/" --exclude ".gitignore" --exclude ".gitattributes" --exclude "/blog/" --exclude "links.csv" \
   ./ "$SERVER:$REMOTE_DIR"
 
 echo; echo "Done."

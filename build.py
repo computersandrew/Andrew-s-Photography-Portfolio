@@ -15,14 +15,19 @@ Folder layout:   images/<medium>/<group>/<album>/[<film stock>/]photo.jpg
 Run it any time you add, move or rename photos:   python3 build.py
 Optional, to read camera details out of digital photos automatically:   pip3 install pillow
 """
+import base64
 import csv
+import datetime
+import hashlib
+import html as html_lib
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 IMG = os.path.join(ROOT, "images")
@@ -214,6 +219,373 @@ def load_links():
              "url": r.get("url", ""), "note": r.get("note", "")} for r in rows if r.get("url") and r.get("title")]
 
 
+# ------------------------------------------------------------------ blog
+# Posts live in blog/ as Markdown (.md) or HTML (.html) files, e.g. exported from Claude Docs.
+BLOG = os.path.join(ROOT, "blog")
+POST_EXTS = (".md", ".markdown", ".html", ".htm")
+BLOG_EDGE = 1800
+LIST_RE = re.compile(r"^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$")
+HR_RE = re.compile(r"^\s{0,3}([-*_])(\s*\1){2,}\s*$")
+IMG_ONLY_RE = re.compile(r'^!\[([^\]]*)\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+"([^"]*)")?\s*\)$')
+TABLE_RULE_RE = re.compile(r"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$")
+
+
+def h_esc(s):
+    return html_lib.escape(str(s), quote=True)
+
+
+def slugify(s):
+    return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-") or "post"
+
+
+def md_url(u):
+    u = u.strip()
+    return u[1:-1] if u.startswith("<") and u.endswith(">") else u
+
+
+def md_indent(s):
+    return len(s.expandtabs(4))
+
+
+def blog_image(slug, name, data=None, path=None):
+    """Saves a web-sized copy of a post image in web/blog/<slug>/ and returns its path on the site."""
+    if data is None:
+        with open(path, "rb") as fh:
+            data = fh.read()
+    out_dir = os.path.join(WEB, "blog", slug)
+    os.makedirs(out_dir, exist_ok=True)
+    stem = slugify(os.path.splitext(name)[0])[:60]
+    base = "%s-%s" % (stem, hashlib.sha1(data).hexdigest()[:8])  # same picture -> same file, no re-work
+    for ext in (".jpg", ".png", ".gif", ".webp", ".svg"):
+        if os.path.exists(os.path.join(out_dir, base + ext)):
+            return "web/blog/%s/%s%s" % (slug, base, ext)
+    raw_ext = os.path.splitext(name)[1].lower()
+    if raw_ext not in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"):
+        raw_ext = ".jpg"
+    try:
+        from PIL import Image, ImageOps
+        Image.MAX_IMAGE_PIXELS = None
+        im = Image.open(io.BytesIO(data))
+        if getattr(im, "is_animated", False) or im.format == "GIF":
+            raise ValueError("keep as is")
+        alpha = im.mode in ("RGBA", "LA") or "transparency" in im.info
+        icc = im.info.get("icc_profile")
+        im = ImageOps.exif_transpose(im)
+        im.thumbnail((BLOG_EDGE, BLOG_EDGE), Image.LANCZOS)
+        if alpha:
+            out = base + ".png"
+            im.convert("RGBA").save(os.path.join(out_dir, out), "PNG", optimize=True)
+        else:
+            out = base + ".jpg"
+            im.convert("RGB").save(os.path.join(out_dir, out), "JPEG", quality=85, optimize=True,
+                                   progressive=True, icc_profile=icc)
+        return "web/blog/%s/%s" % (slug, out)
+    except Exception:
+        pass  # no Pillow, or a format it cannot read: keep the file as it is
+    out = base + raw_ext
+    with open(os.path.join(out_dir, out), "wb") as fh:
+        fh.write(data)
+    return "web/blog/%s/%s" % (slug, out)
+
+
+def make_resolver(slug, post_dir):
+    """Turns an image reference found in a post into a path on the site."""
+    mime_ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp", "image/svg+xml": ".svg"}
+
+    def resolve(src):
+        s = src.strip()
+        m = re.match(r"^data:(image/[\w.+-]+);base64,(.+)$", s, re.S)
+        if m:
+            try:
+                data = base64.b64decode(m.group(2))
+            except Exception:
+                return s
+            return blog_image(slug, "image" + mime_ext.get(m.group(1), ".jpg"), data=data)
+        if re.match(r"^(https?:)?//", s) or s.startswith("#"):
+            return s
+        rel = unquote(re.split(r"[?#]", s)[0])
+        for base_dir in (post_dir, BLOG, IMG):
+            cand = os.path.normpath(os.path.join(base_dir, rel))
+            if os.path.isfile(cand):
+                return blog_image(slug, os.path.basename(cand), path=cand)
+        print("WARNING: image not found for post '%s': %s (put the file next to the post)" % (slug, s[:80]))
+        return s
+
+    return resolve
+
+
+def md_inline(text, resolve):
+    toks = []
+
+    def stash(h):
+        toks.append(h)
+        return "\x00%d\x00" % (len(toks) - 1)
+
+    def img(m):
+        return stash('<img src="%s" alt="%s" loading="lazy">' % (h_esc(resolve(md_url(m.group(2)))), h_esc(m.group(1))))
+
+    def link(m):
+        u = md_url(m.group(2))
+        if re.match(r"^\s*(javascript|vbscript|data):", u, re.I):
+            u = "#"
+        ext = ' target="_blank" rel="noopener noreferrer"' if re.match(r"^https?:", u, re.I) else ""
+        return stash('<a href="%s"%s>' % (h_esc(u), ext)) + m.group(1) + stash("</a>")
+
+    t = re.sub(r"`([^`\n]+)`", lambda m: stash("<code>%s</code>" % h_esc(m.group(1))), text)
+    t = re.sub(r'!\[([^\]]*)\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+"[^"]*")?\s*\)', img, t)
+    t = re.sub(r'\[([^\]]+)\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+"[^"]*")?\s*\)', link, t)
+    t = re.sub(r"<(https?://[^>\s]+)>", lambda m: stash('<a href="%s" target="_blank" rel="noopener noreferrer">%s</a>' % (h_esc(m.group(1)), h_esc(m.group(1)))), t)
+    t = h_esc(t)
+    t = re.sub(r"\*\*(?=\S)(.+?)(?<=\S)\*\*", r"<strong>\1</strong>", t)
+    t = re.sub(r"(?<!\w)__(?=\S)(.+?)(?<=\S)__(?!\w)", r"<strong>\1</strong>", t)
+    t = re.sub(r"(?<![*\w])\*(?=[^\s*])(.+?)(?<=[^\s*])\*(?![*\w])", r"<em>\1</em>", t)
+    t = re.sub(r"(?<!\w)_(?=[^\s_])(.+?)(?<=[^\s_])_(?!\w)", r"<em>\1</em>", t)
+    t = re.sub(r"~~(?=\S)(.+?)(?<=\S)~~", r"<del>\1</del>", t)
+    t = re.sub(r" {2,}\n", "<br>\n", t)
+    return re.sub(r"\x00(\d+)\x00", lambda m: toks[int(m.group(1))], t)
+
+
+def md_starts_block(line):
+    return bool(re.match(r"^\s*(```|~~~)", line) or re.match(r"^#{1,6}\s", line) or HR_RE.match(line)
+                or re.match(r"^\s{0,3}>", line) or LIST_RE.match(line))
+
+
+def md_split_row(line):
+    line = line.strip()
+    if line.startswith("|"):
+        line = line[1:]
+    if line.endswith("|"):
+        line = line[:-1]
+    return [c.strip() for c in re.split(r"(?<!\\)\|", line)]
+
+
+def md_list(lines, i, resolve):
+    n = len(lines)
+    m0 = LIST_RE.match(lines[i])
+    base = md_indent(m0.group(1))
+    ordered = m0.group(2)[0].isdigit()
+    start = int(re.match(r"\d+", m0.group(2)).group(0)) if ordered else 1
+    items = []
+    while i < n:
+        line = lines[i]
+        if not line.strip():
+            j = i + 1
+            while j < n and not lines[j].strip():
+                j += 1
+            if j >= n or not items:
+                break
+            ind = md_indent(lines[j][:len(lines[j]) - len(lines[j].lstrip())])
+            if ind > base + 1:  # the current item goes on after the blank line
+                items[-1].append("")
+                i = j
+                continue
+            if LIST_RE.match(lines[j]) and ind >= base:
+                i = j
+                continue
+            break
+        m = LIST_RE.match(line)
+        ind = md_indent(line[:len(line) - len(line.lstrip())])
+        if m and base <= ind <= base + 1:
+            if m.group(2)[0].isdigit() != ordered:
+                break
+            items.append([m.group(3)])
+            i += 1
+            continue
+        if ind > base and items:  # nested list or continued text
+            items[-1].append(line)
+            i += 1
+            continue
+        if m and ind < base:
+            break
+        if items and not m and not md_starts_block(line):
+            items[-1].append(line.strip())
+            i += 1
+            continue
+        break
+    parts = []
+    for it in items:
+        first, rest = it[0], it[1:]
+        box = ""
+        mt = re.match(r"^\[([ xX])\]\s+(.*)$", first)
+        if mt:
+            box = '<input type="checkbox" disabled%s> ' % (" checked" if mt.group(1) in "xX" else "")
+            first = mt.group(2)
+        body = md_blocks([first] + rest, resolve)
+        if "" not in rest and body.startswith("<p>"):  # tight list: no paragraph wrapper
+            body = re.sub(r"^<p>(.*?)</p>", r"\1", body, count=1, flags=re.S)
+        parts.append("<li>%s%s</li>" % (box, body))
+    tag = "ol" if ordered else "ul"
+    attr = ' start="%d"' % start if ordered and start != 1 else ""
+    cls = ' class="tasks"' if any('type="checkbox"' in p for p in parts) else ""
+    return "<%s%s%s>%s</%s>" % (tag, attr, cls, "".join(parts), tag), i
+
+
+def md_blocks(lines, resolve):
+    out, i, n = [], 0, len(lines)
+    while i < n:
+        line = lines[i]
+        if not line.strip():
+            i += 1
+            continue
+        m = re.match(r"^\s*(```|~~~)", line)
+        if m:
+            fence = m.group(1)
+            i += 1
+            buf = []
+            while i < n and not lines[i].strip().startswith(fence):
+                buf.append(lines[i])
+                i += 1
+            i += 1
+            out.append("<pre><code>%s</code></pre>" % h_esc("\n".join(buf)))
+            continue
+        m = re.match(r"^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$", line)
+        if m:
+            lv = len(m.group(1))
+            out.append("<h%d>%s</h%d>" % (lv, md_inline(m.group(2), resolve), lv))
+            i += 1
+            continue
+        if HR_RE.match(line):
+            out.append("<hr>")
+            i += 1
+            continue
+        if re.match(r"^\s{0,3}>", line):
+            buf = []
+            while i < n and re.match(r"^\s{0,3}>", lines[i]):
+                buf.append(re.sub(r"^\s{0,3}>\s?", "", lines[i]))
+                i += 1
+            out.append("<blockquote>%s</blockquote>" % md_blocks(buf, resolve))
+            continue
+        if "|" in line and i + 1 < n and "|" in lines[i + 1] and TABLE_RULE_RE.match(lines[i + 1]):
+            head = md_split_row(line)
+            i += 2
+            rows = []
+            while i < n and lines[i].strip() and "|" in lines[i]:
+                rows.append(md_split_row(lines[i]))
+                i += 1
+            th = "".join("<th>%s</th>" % md_inline(c, resolve) for c in head)
+            tb = "".join("<tr>%s</tr>" % "".join("<td>%s</td>" % md_inline(c, resolve) for c in r) for r in rows)
+            out.append('<div class="tablewrap"><table><thead><tr>%s</tr></thead><tbody>%s</tbody></table></div>' % (th, tb))
+            continue
+        if LIST_RE.match(line):
+            h, i = md_list(lines, i, resolve)
+            out.append(h)
+            continue
+        buf = []
+        while i < n and lines[i].strip() and (not buf or not md_starts_block(lines[i])):
+            buf.append(lines[i].lstrip())
+            i += 1
+        text = "\n".join(buf).rstrip()
+        mi = IMG_ONLY_RE.match(text.strip())
+        if mi:
+            cap = "<figcaption>%s</figcaption>" % h_esc(mi.group(3)) if mi.group(3) else ""
+            out.append('<figure><img src="%s" alt="%s" loading="lazy">%s</figure>' % (h_esc(resolve(md_url(mi.group(2)))), h_esc(mi.group(1)), cap))
+        else:
+            out.append("<p>%s</p>" % md_inline(text, resolve))
+    return "".join(out)
+
+
+def md_front_matter(text):
+    m = re.match(r"^---[ \t]*\n(.*?)\n---[ \t]*(?:\n|$)", text, re.S)
+    if not m:
+        return {}, text
+    meta = {}
+    for ln in m.group(1).split("\n"):
+        k, sep, v = ln.partition(":")
+        if sep:
+            meta[k.strip().lower()] = v.strip().strip("\"'")
+    return meta, text[m.end():]
+
+
+def html_post(raw, resolve):
+    """An .html post (for example a Docs HTML export): returns (title, body html)."""
+    mb = re.search(r"<body[^>]*>(.*)</body>", raw, re.S | re.I)
+    body = mb.group(1) if mb else raw
+    for tag in ("script", "style", "iframe", "object", "embed", "form", "noscript"):
+        body = re.sub(r"<%s\b.*?</%s\s*>" % (tag, tag), "", body, flags=re.S | re.I)
+    body = re.sub(r"<(?:script|style|iframe|object|embed|link|meta|base)\b[^>]*>", "", body, flags=re.I)
+
+    def clean(m):
+        t = re.sub(r"""\s(?:on\w+|style|srcdoc)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", "", m.group(0), flags=re.I)
+        return re.sub(r"""(href|src)\s*=\s*(["'])\s*(?:javascript|vbscript):[^"']*\2""", r"\1=\2#\2", t, flags=re.I)
+
+    body = re.sub(r"<[^>]+>", clean, body)
+    title = None
+    mt = re.search(r"<h1\b[^>]*>(.*?)</h1>", body, re.S | re.I)
+    if mt:
+        title = html_lib.unescape(re.sub(r"<[^>]+>", "", mt.group(1))).strip()
+        body = body.replace(mt.group(0), "", 1)
+    else:
+        mt = re.search(r"<title[^>]*>(.*?)</title>", raw, re.S | re.I)
+        if mt:
+            title = html_lib.unescape(mt.group(1)).strip()
+    body = re.sub(r"""(<img\b[^>]*?\bsrc\s*=\s*)(["'])(.*?)\2""",
+                  lambda m: m.group(1) + m.group(2) + h_esc(resolve(html_lib.unescape(m.group(3)))) + m.group(2),
+                  body, flags=re.S | re.I)
+    return title, body.strip()
+
+
+def load_posts():
+    if not os.path.isdir(BLOG):
+        return []
+    files = []
+    for dp, dn, fn in os.walk(BLOG):
+        dn[:] = sorted(d for d in dn if not d.startswith((".", "_")))
+        for f in sorted(fn):
+            if f.lower().endswith(POST_EXTS) and not f.startswith((".", "_")):
+                files.append(os.path.join(dp, f))
+    posts, seen = [], set()
+    for path in files:
+        stem = os.path.splitext(os.path.basename(path))[0]
+        parent = os.path.dirname(path)
+        name = os.path.basename(parent) if parent != BLOG and stem.lower() in ("index", "post", "article", "readme") else stem
+        m = re.match(r"^(\d{4}-\d{2}-\d{2})[-_ ]+(.+)$", name)
+        file_date, name = (m.group(1), m.group(2)) if m else (None, name)
+        try:
+            with open(path, encoding="utf-8-sig", errors="replace") as fh:
+                raw = fh.read()
+        except OSError as e:
+            print("Could not read %s: %s" % (path, e))
+            continue
+        is_html = path.lower().endswith((".html", ".htm"))
+        meta, raw = ({}, raw) if is_html else md_front_matter(raw)
+        if meta.get("draft", "").lower() in ("yes", "true", "1", "y"):
+            continue
+        slug = slugify(meta.get("slug") or name)
+        base_slug, k = slug, 2
+        while slug in seen:
+            slug = "%s-%d" % (base_slug, k)
+            k += 1
+        seen.add(slug)
+        resolve = make_resolver(slug, parent)
+        if is_html:
+            title, body = html_post(raw, resolve)
+        else:
+            lines = raw.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+            k = 0
+            while k < len(lines) and not lines[k].strip():
+                k += 1
+            title = None
+            mh = re.match(r"^#\s+(.*?)(?:\s+#+)?\s*$", lines[k]) if k < len(lines) else None
+            if mh:
+                title = re.sub(r"[*_`]", "", mh.group(1)).strip()
+                lines = lines[k + 1:]
+            body = md_blocks(lines, resolve)
+        title = meta.get("title") or title or display(name)
+        date = (meta.get("date") or "")[:10]
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+            date = file_date or datetime.date.fromtimestamp(os.path.getmtime(path)).isoformat()
+        excerpt = ""
+        mp = re.search(r"<p>(.*?)</p>", body, re.S)
+        if mp:
+            t = re.sub(r"\s+", " ", html_lib.unescape(re.sub(r"<[^>]+>", "", mp.group(1)))).strip()
+            excerpt = t if len(t) <= 200 else t[:200].rsplit(" ", 1)[0] + "…"
+        mc = re.search(r'<img[^>]*\bsrc="([^"]+)"', body)
+        posts.append({"slug": slug, "title": title, "date": date, "excerpt": excerpt,
+                      "cover": html_lib.unescape(mc.group(1)) if mc else "", "html": body})
+    posts.sort(key=lambda p: (p["date"], p["title"]), reverse=True)
+    return posts
+
+
 def main():
     tree, found = scan()
     rows = load_rows()
@@ -284,16 +656,21 @@ def main():
         w.writeheader()
         w.writerows(rows)
 
+    posts = load_posts()
+
     with open(OUT, "w", encoding="utf-8") as fh:
         fh.write("/* Generated by build.py from the images folder. Do not edit; run build.py again. */\n")
         fh.write("/* lite build: double-click opens the web copy, not the original */\n" if LITE else "")
         fh.write("var TREE = " + json.dumps(tree, indent=1, ensure_ascii=False) + ";\n")
         fh.write("var PHOTOS = " + json.dumps(photos, indent=1, ensure_ascii=False) + ";\n")
         fh.write("var LINKS = " + json.dumps(load_links(), indent=1, ensure_ascii=False) + ";\n")
+        fh.write("var POSTS = " + json.dumps(posts, indent=1, ensure_ascii=False) + ";\n")
 
     stale = [r["file"] for r in rows if r.get("file") and r["file"] not in used]
     albums = sum(len(g["albums"]) for m in tree for g in m["groups"])
     print("Built data.js: %d photos in %d albums." % (len(photos), albums))
+    if posts:
+        print("%d blog post(s)." % len(posts))
     if stale:
         print("%d row(s) in settings.csv have no matching photo (moved or deleted); delete them if you like." % len(stale))
 

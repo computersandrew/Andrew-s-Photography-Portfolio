@@ -1,3 +1,12 @@
 images/
 .DS_Store
 __pycache__/
+# blog: keep the posts, not the full-size pictures (web-sized copies go in web/blog/)
+blog/**/*.jpg
+blog/**/*.jpeg
+blog/**/*.png
+blog/**/*.gif
+blog/**/*.webp
+blog/**/*.heic
+blog/**/*.tif
+blog/**/*.tiff
