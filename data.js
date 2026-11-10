@@ -4691,28 +4691,28 @@ var LINKS = [
   "album": "All Sports",
   "title": "LM vs. Harriton",
   "url": "https://photos.app.goo.gl/GYL5ocfaGDHJYd1RA",
-  "note": "V Hockey · 11/28/24"
+  "note": "Varsity Hockey · 11/28/24"
  },
  {
   "medium": "Digital",
   "album": "All Sports",
   "title": "Harriton vs. Upper Darby",
   "url": "https://photos.app.goo.gl/X5ACDPPnUtywsDJL7",
-  "note": "V Football · 9/18/24"
+  "note": "Varsity Football · 9/18/24"
  },
  {
   "medium": "Digital",
   "album": "All Sports",
   "title": "Harriton vs. LM",
   "url": "https://photos.app.goo.gl/vZVZEArcdfX88HZF9",
-  "note": "V Soccer · 9/5/24"
+  "note": "Varsity Soccer · 9/5/24"
  },
  {
   "medium": "Digital",
   "album": "All Sports",
   "title": "Harriton vs. Strath Haven",
   "url": "https://photos.app.goo.gl/KZLLkwKQKfBLgmkW9",
-  "note": "V Baseball · 5/8/23"
+  "note": "Varsity Baseball · 5/8/23"
  }
 ];
 var POSTS = [];
